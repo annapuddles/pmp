@@ -1,0 +1,11 @@
+default_volume = 1.0
+hover_text = 1
+hover_text_color = <1, 1, 1>
+hover_text_alpha = 1.0
+progress_bar_size = 30
+progress_bar_start = |
+progress_bar_fill = -
+progress_bar_head = []
+progress_bar_end = |
+parameter_separator = |
+debug = 0
