@@ -1,10 +1,6 @@
 # Adding pmp to an object
 
-To add the Poodle Music Player (pmp) to an object:
-
-1. Place the "pmp (poodle music player)" script, "pmp config" notecard, and any song notecards on to a prim.
-
-2. Place the "pmp preloader" script on to a *different* prim than the "pmp (poodle music player)" script.
+To add the Poodle Music Player (pmp) to an object, place the "pmp (poodle music player)" script, "pmp config" notecard, "pmp preloader", and any song notecards on to a prim.
 
 The preloader is optional, but can improve the smoothness of playback.
 
@@ -42,10 +38,42 @@ llMessageLinked(LINK_ROOT, PMP_PLAY, "Song name", NULL_KEY);
 
 # Interacting with pmp
 
-The pmp script can be controlled through link messages from other scripts. Link messages use the following format:
+The pmp script can be controlled through JSON-RPC link messages from other scripts.
 
+## pmp:play (title, loop, volume)
+
+Play a song.
+
+### Parameters
+
+- `title` The title of the song to play.
+- `loop` Whether to loop the song or not.
+- `volume` The volume to play the song at.
+
+### Example
 ```lsl
-llMessageLinked(link_number, command_code, parameters, NULL_KEY);
+string params = llList2Json(JSON_OBJECT, [
+    "title", "My Song",
+    "loop", 1,
+    "volume", "50"
+];
+
+string message = llList2Json(JSON_OBJECT, [
+    "method", "pmp:play",
+    "params", params
+]);
+
+llMessageLinked(LINK_ROOT, 0, message, NULL_KEY);
 ```
 
-Where `link_number` is the link number of the prim containing the pmp script (or a special number like `LINK_SET`), `command_code` is one of the special command codes for pmp (`PMP_PLAY`, `PMP_STOP`, etc.), and `parameters` is a string containing any number of parameters to the command separated by the parameter separator (the default is `|`, but it can be configured in the configuration notecard with the `parameter_separator` setting).
+## pmp:stop ()
+
+Stop the currently playing song.
+
+### Example
+
+```lsl
+string message = llList2Json(JSON_OBJECT, ["method", "pmp:stop"]);
+
+llMessageLinked(LINK_ROOT, 0, message, NULL_KEY);
+```
