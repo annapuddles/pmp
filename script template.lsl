@@ -1,20 +1,7 @@
 /* pmp helper functions */
-string jsonrpc_link_request(integer link, string method, string params_type, list params, string id)
-{
-    if (id == "") id = (string) llGenerateKey();
-    llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "id", id, "method", method, "params", llList2Json(params_type, params)]), NULL_KEY);
-    return id;
-}
-
 jsonrpc_link_notification(integer link, string method, string params_type, list params)
 {
     llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "method", method, "params", llList2Json(params_type, params)]), NULL_KEY);
-}
-
-jsonrpc_link_response(integer link, string request, string result)
-{
-    string id = llJsonGetValue(request, ["id"]);
-    llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "id", id, "result", result]), NULL_KEY);
 }
 
 pmp_play(integer link, string title, integer loop, float volume)
