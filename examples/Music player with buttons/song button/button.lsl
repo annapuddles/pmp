@@ -1,4 +1,7 @@
-integer BUTTON_PRESSED = 12345;
+jsonrpc_link_notification(integer link, string method, string params_type, list params)
+{
+    llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "method", method, "params", llList2Json(params_type, params)]), NULL_KEY);
+}
 
 default
 {
@@ -9,7 +12,6 @@ default
     
     touch_start(integer total_number)
     {
-        llMessageLinked(LINK_ROOT, BUTTON_PRESSED, llGetObjectName(), NULL_KEY);
+        jsonrpc_link_notification(LINK_SET, "button-pressed", JSON_OBJECT, ["title", llGetObjectName()]);
     }
 }
-
