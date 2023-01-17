@@ -1,6 +1,16 @@
-integer PMP_SET_VOLUME = 9;
-integer PMP_GET_VOLUME = 10;
-integer PMP_GET_VOLUME_RESPONSE = 11;
+string jsonrpc_link_request(integer link, string method, string params_type, list params, string id)
+{
+    if (id == "") id = (string) llGenerateKey();
+    llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "id", id, "method", method, "params", llList2Json(params_type, params)]), NULL_KEY);
+    return id;
+}
+
+jsonrpc_link_notification(integer link, string method, string params_type, list params)
+{
+    llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "method", method, "params", llList2Json(params_type, params)]), NULL_KEY);
+}
+
+string get_volume_request;
 
 default
 {
@@ -11,15 +21,15 @@ default
     
     touch_start(integer total_number)
     {
-        llMessageLinked(LINK_ROOT, PMP_GET_VOLUME, "", NULL_KEY);
+        get_volume_request = jsonrpc_link_request(LINK_SET, "pmp:get-volume", JSON_OBJECT, [], "");
     }
     
-    link_message(integer sender, integer command, string parameters, key id)
+    link_message(integer sender, integer num, string str, key id)
     {
-        if (command == PMP_GET_VOLUME_RESPONSE)
+        if (llJsonGetValue(str, ["id"]) == get_volume_request)
         {
-            llMessageLinked(LINK_ROOT, PMP_SET_VOLUME, (string) ((float) parameters + 0.1), NULL_KEY);
+            float volume = (float) llJsonGetValue(str, ["result"]);
+            jsonrpc_link_notification(sender, "pmp:set-volume", JSON_OBJECT, ["volume", volume + .1]);
         }
     }
 }
-
