@@ -1,37 +1,39 @@
-integer PMP_STOP = 0;
-integer PMP_PLAY = 1;
-integer PMP_CURRENT_SONG = 2;
-integer PMP_CURRENT_SONG_RESPONSE = 3;
-integer PMP_PRELOAD = 4;
-integer PMP_STARTUP_COMPLETE = 5;
-integer PMP_READY = 6;
-integer PMP_READY_RESPONSE = 7;
-integer PMP_SONG_ENDED = 8;
-
-integer BUTTON_PRESSED = 12345;
-
 string song;
+string current_song_request;
+
+string jsonrpc_link_request(integer link, string method, string params_type, list params, string id)
+{
+    if (id == "") id = (string) llGenerateKey();
+    llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "id", id, "method", method, "params", llList2Json(params_type, params)]), NULL_KEY);
+    return id;
+}
+
+jsonrpc_link_notification(integer link, string method, string params_type, list params)
+{
+    llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "method", method, "params", llList2Json(params_type, params)]), NULL_KEY);
+}
 
 default
 {
-    link_message(integer sender, integer command, string parameters, key id)
+    link_message(integer sender, integer num, string str, key id)
     {
-        if (command == BUTTON_PRESSED)
+        string method = llJsonGetValue(str, ["method"]);
+        
+        if (method == "button-pressed")
         {
-            song = parameters;
-            llMessageLinked(LINK_THIS, PMP_CURRENT_SONG, "", NULL_KEY);
+            song = llJsonGetValue(str, ["params", "title"]);
+            current_song_request = jsonrpc_link_request(LINK_THIS, "pmp:current-song", JSON_OBJECT, [], "");
         }
-        else if (command == PMP_CURRENT_SONG_RESPONSE)
+        else if (llJsonGetValue(str, ["id"]) == current_song_request)
         {
-            if (parameters == song)
+            if (llJsonGetValue(str, ["result"]) == song)
             {
-                llMessageLinked(LINK_THIS, PMP_STOP, "", NULL_KEY);
+                jsonrpc_link_notification(LINK_THIS, "pmp:stop", JSON_OBJECT, []);
             }
             else
             {
-                llMessageLinked(LINK_THIS, PMP_PLAY, song, NULL_KEY);
+                jsonrpc_link_notification(LINK_THIS, "pmp:play", JSON_OBJECT, ["title", song]);
             }
         }
     }
 }
-

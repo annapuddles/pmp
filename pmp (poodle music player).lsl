@@ -1,35 +1,11 @@
-/* Link message codes */
-integer PMP_STOP = 0;
-integer PMP_PLAY = 1;
-integer PMP_CURRENT_SONG = 2;
-integer PMP_CURRENT_SONG_RESPONSE = 3;
-integer PMP_PRELOAD = 4;
-integer PMP_STARTUP_COMPLETE = 5;
-integer PMP_READY = 6;
-integer PMP_READY_RESPONSE = 7;
-integer PMP_SONG_ENDED = 8;
-integer PMP_SET_VOLUME = 9;
-integer PMP_GET_VOLUME = 10;
-integer PMP_GET_VOLUME_RESPONSE = 11;
-integer PMP_GET_DURATION = 12;
-integer PMP_GET_DURATION_RESPONSE = 13;
-integer PMP_GET_TIME = 14;
-integer PMP_GET_TIME_RESPONSE = 15;
-integer PMP_SET_TIME = 16;
-integer PMP_GET_PROGRESS = 17;
-integer PMP_GET_PROGRESS_RESPONSE = 18;
-integer PMP_SONG_STARTED = 19;
-integer PMP_PAUSE = 20;
-integer PMP_RESUME = 21;
-integer PMP_PAUSED = 22;
-integer PMP_PAUSED_RESPONSE = 23;
+/* The version number of pmp. */
+string version = "1.0.0";
 
 /* The name of the notecard containing the configuration settings */
 string CONFIG_NAME = "pmp config";
 
 /* Configurable options */
 integer debug = FALSE;
-string parameter_separator = "|";
 integer hover_text = TRUE;
 vector hover_text_color = <1, 1, 1>;
 float hover_text_alpha = 1;
@@ -59,6 +35,24 @@ integer clip;
 float duration;
 integer paused;
 
+string jsonrpc_link_request(integer link, string method, string params_type, list params, string id)
+{
+    if (id == "") id = (string) llGenerateKey();
+    llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "id", id, "method", method, "params", llList2Json(params_type, params)]), NULL_KEY);
+    return id;
+}
+
+jsonrpc_link_notification(integer link, string method, string params_type, list params)
+{
+    llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "method", method, "params", llList2Json(params_type, params)]), NULL_KEY);
+}
+
+jsonrpc_link_response(integer link, string request, string result)
+{
+    string id = llJsonGetValue(request, ["id"]);
+    llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "id", id, "result", result]), NULL_KEY);
+}
+
 /* Set the hover text using the configured color and alpha */
 set_hover_text(string text)
 {
@@ -68,7 +62,7 @@ set_hover_text(string text)
 /* Preload a sound clip by playing it silently on a linked prim so it loads faster when actually playing it */
 preload(integer index)
 {
-    llMessageLinked(LINK_ALL_OTHERS, PMP_PRELOAD, "", llList2Key(clips,index));
+    jsonrpc_link_notification(LINK_SET, "pmp:preload", JSON_OBJECT, ["sound", llList2Key(clips, index)]);;
 }
 
 /* Play a sound clip by its index in the stored clips list */
@@ -142,7 +136,7 @@ start_song(string name, integer loop, float vol)
     llSetTimerEvent(1.0);
     
     /* Send out a message to linked prims that a song has been started */
-    llMessageLinked(LINK_SET, PMP_SONG_STARTED, title, NULL_KEY);
+    jsonrpc_link_notification(LINK_SET, "pmp:song-started", JSON_OBJECT, ["title", title]);
 }
 
 /* Stop the current song from playing */
@@ -155,7 +149,7 @@ stop_song()
     }
     
     /* Send out a message to linked prims that the song has ended or was stopped */
-    llMessageLinked(LINK_SET, PMP_SONG_ENDED, title, NULL_KEY);
+    jsonrpc_link_notification(LINK_SET, "pmp:song-ended", JSON_OBJECT, ["title", title]);
     
     /* Unset the current song details */
     song = -1;
@@ -293,6 +287,12 @@ read_notecards()
 /* Process a line in the configuration notecard */
 process_config(string data)
 {
+    /* Ignore comments. */
+    if (llGetSubString(data, 0, 1) == "#")
+    {
+        return;
+    }
+    
     /* Each line will be in the form of: setting_name = setting_value */
     list setting = llParseString2List(data, [" = "], []);
     
@@ -314,10 +314,6 @@ process_config(string data)
     else if (setting_name == "debug")
     {
         debug = (integer) setting_value;
-    }
-    else if (setting_name == "parameter_separator")
-    {
-        parameter_separator = setting_value;
     }
     else if (setting_name == "default_volume")
     {
@@ -494,7 +490,7 @@ set_volume(float vol)
 }
 
 /* Process a message from a linked prim or listener. */
-process_message(integer sender, integer command, string parameters)
+process_message(integer sender, string message)
 {
     /* If we haven't finished initializing, ignore the message */
     if (!is_ready())
@@ -502,88 +498,94 @@ process_message(integer sender, integer command, string parameters)
         return;
     }
     
-    /* Get the individual parameters from the combined parameters string */
-    list params = llParseString2List(parameters, [parameter_separator], []);
-    integer num_params = llGetListLength(params);
+    string method = llJsonGetValue(message, ["method"]);
     
-    if (command == PMP_STOP)
+    if (method == "pmp:stop")
     {
         stop_song();
     }
-    else if (command == PMP_PLAY)
+    else if (method == "pmp:play")
     {
         string title;
         integer loop;
         float volume;
-
-        if (num_params == 0)
+        
+        if (llJsonValueType(message, ["params", "title"]) == JSON_STRING)
+        {
+            title = llJsonGetValue(message, ["params", "title"]);
+        }
+        else
         {
             return;
         }
-        else if (num_params == 1)
+        
+        if (llJsonValueType(message, ["params", "loop"]) == JSON_NUMBER)
         {
-            title = llList2String(params, 0);
+            loop = (integer) llJsonGetValue(message, ["params", "loop"]);
+        }
+        else
+        {
             loop = FALSE;
-            volume = default_volume;
         }
-        else if (num_params == 2)
+        
+        if (llJsonValueType(message, ["params", "volume"]) == JSON_NUMBER)
         {
-            title = llList2String(params, 0);
-            loop = (integer) llList2String(params, 1);
-            volume = default_volume;
+            volume = (float) llJsonGetValue(message, ["params", "volume"]);
         }
-        else if (num_params == 3)
+        else
         {
-            title = llList2String(params, 0);
-            loop = (integer) llList2String(params, 1);
-            volume = (float) llList2String(params, 2);
+            volume = default_volume;
         }
         
         start_song(title, loop, volume);
     }
-    else if (command == PMP_READY)
+    else if (method == "pmp:is-ready")
     {
-        llMessageLinked(sender, PMP_READY_RESPONSE, (string) is_ready(), NULL_KEY);
+        string id = llJsonGetValue(message, ["id"]);
+        
+        jsonrpc_link_response(sender, message, (string) is_ready());
     }
-    else if (command == PMP_CURRENT_SONG)
+    else if (method == "pmp:current-song")
     {
-        llMessageLinked(sender, PMP_CURRENT_SONG_RESPONSE, get_title(), NULL_KEY);
+        jsonrpc_link_response(sender, message, get_title());
     }
-    else if (command == PMP_SET_VOLUME)
+    else if (method == "pmp:set-volume")
     {
-        set_volume((float) parameters);
+        float volume = (float) llJsonGetValue(message, ["params", "volume"]);
+        set_volume(volume);
     }
-    else if (command == PMP_GET_VOLUME)
+    else if (method == "pmp:get-volume")
     {
-        llMessageLinked(sender, PMP_GET_VOLUME_RESPONSE, (string) get_volume(), NULL_KEY);
+        jsonrpc_link_response(sender, message, (string) get_volume());
     }
-    else if (command == PMP_GET_DURATION)
+    else if (method == "pmp:get-duration")
     {
-        llMessageLinked(sender, PMP_GET_DURATION_RESPONSE, (string) get_duration(), NULL_KEY);
+        jsonrpc_link_response(sender, message, (string) get_duration());
     }
-    else if (command == PMP_GET_TIME)
+    else if (method == "pmp:get-time")
     {
-        llMessageLinked(sender, PMP_GET_TIME_RESPONSE, (string) get_time(), NULL_KEY);
+        jsonrpc_link_response(sender, message, (string) get_time());
     }
-    else if (command == PMP_SET_TIME)
+    else if (method == "pmp:set-time")
     {
-        set_time((float) parameters);
+        float time = (float) llJsonGetValue(message, ["params", "time"]);
+        set_time(time);
     }
-    else if (command == PMP_GET_PROGRESS)
+    else if (method == "pmp:get-progress")
     {
-        llMessageLinked(sender, PMP_GET_PROGRESS_RESPONSE, (string) get_progress(), NULL_KEY);
+        jsonrpc_link_response(sender, message, (string) get_progress());
     }
-    else if (command == PMP_PAUSE)
+    else if (method == "pmp:pause")
     {
         pause_song();
     }
-    else if (command == PMP_RESUME)
+    else if (method == "pmp:resume")
     {
         resume_song();
     }
-    else if (command == PMP_PAUSED)
+    else if (method == "pmp:is-paused")
     {
-        llMessageLinked(sender, PMP_PAUSED_RESPONSE, (string) paused, NULL_KEY);
+        jsonrpc_link_response(sender, message, (string) paused);
     }
 }
 
@@ -710,8 +712,8 @@ default
                 /* If in debug mode, print out the values of all the configuration settings */
                 if (debug)
                 {
+                    llOwnerSay("Version: " + version);
                     llOwnerSay("Configuration:");
-                    llOwnerSay("  parameter_separator = " + parameter_separator);
                     llOwnerSay("  hover_text = " + (string) hover_text);
                     llOwnerSay("  hover_text_color = " + (string) hover_text_color);
                     llOwnerSay("  hover_text_alpha = " + (string) hover_text_alpha);
@@ -760,7 +762,7 @@ default
                 
                 notecards_read = TRUE;
                 
-                llMessageLinked(LINK_SET, PMP_STARTUP_COMPLETE, "", NULL_KEY);
+                jsonrpc_link_notification(LINK_SET, "pmp:startup-complete", JSON_OBJECT, []);
 
                 return;
             }
@@ -844,7 +846,7 @@ default
     /* Process commands from linked prims */
     link_message(integer sender, integer num, string str, key id)
     {
-        process_message(sender, num, str);
+        process_message(sender, str);
     }
     
     /* If the inventory changes, re-initialize to update the configuration and list of songs */
