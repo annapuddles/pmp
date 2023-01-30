@@ -33,47 +33,119 @@ The rest of the lines in the notecard will be the UUIDs of each clip. They must 
 The name of the notecard is the name you use to start the song, for example when using the `PMP_PLAY` command:
 
 ```lsl
-llMessageLinked(LINK_ROOT, PMP_PLAY, "Song name", NULL_KEY);
+pmp_play(LINK_ROOT, "Song name", FALSE, 1);
 ```
 
 # Interacting with pmp
 
-The pmp script can be controlled through JSON-RPC link messages from other scripts.
+The pmp script can be controlled through JSON-RPC link messages from other scripts. [script template.lsl](script%20template.lsl) contains helper functions for calling these methods.
 
-## pmp:play (title, loop, volume)
+## pmp_play
+
+```lsl
+pmp_play(integer link, string title, integer loop, float volume)
+```
 
 Play a song.
 
 ### Parameters
 
+- `link` The link number of the prim containing the pmp script.
 - `title` The title of the song to play.
 - `loop` Whether to loop the song or not.
 - `volume` The volume to play the song at.
 
 ### Example
 ```lsl
-string params = llList2Json(JSON_OBJECT, [
-    "title", "My Song",
-    "loop", 1,
-    "volume", "50"
-];
-
-string message = llList2Json(JSON_OBJECT, [
-    "method", "pmp:play",
-    "params", params
-]);
-
-llMessageLinked(LINK_ROOT, 0, message, NULL_KEY);
+pmp_play(LINK_ROOT, "My Song", TRUE, 1);
 ```
 
-## pmp:stop ()
+## pmp_stop
+
+```lsl
+pmp_stop(integer link)
+```
 
 Stop the currently playing song.
+
+### Parameters
+
+- `link` The link number of the prim containing the pmp script.
 
 ### Example
 
 ```lsl
-string message = llList2Json(JSON_OBJECT, ["method", "pmp:stop"]);
+pmp_stop(LINK_ROOT);
+```
 
-llMessageLinked(LINK_ROOT, 0, message, NULL_KEY);
+## pmp_pause
+
+```lsl
+pmp_pause(integer link)
+```
+
+Pause the currently playing song.
+
+### Parameters
+
+- `link` The link number of the prim containing the pmp script.
+
+### Example
+
+```lsl
+pmp_pause(LINK_ROOT);
+```
+
+## pmp_resume
+
+```lsl
+pmp_resume(integer link)
+```
+
+Resume the currently paused song.
+
+### Parameters
+
+- `link` The link number of the prim containing the pmp script.
+
+### Example
+
+```lsl
+pmp_resume(LINK_ROOT);
+```
+
+## pmp_set_volume
+
+```lsl
+pmp_set_volume(integer link, float volume)
+```
+
+Set the volume of the currently playing song.
+
+### Parameters
+
+- `link` The link number of the prim containing the pmp script.
+
+### Example
+
+```lsl
+pmp_set_volume(LINK_ROOT, .5);
+```
+
+## pmp_set_time
+
+```lsl
+pmp_set_time(integer link, float time)
+```
+
+Set the current time in seconds to play the current song from.
+
+### Parameters
+
+- `link` The link number of the prim containing the pmp script.
+
+### Example
+
+```lsl
+pmp_set_time(LINK_ROOT, 30);
 ```
