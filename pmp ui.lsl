@@ -17,14 +17,22 @@ string progress_bar_head = "█";
 /* Channel used for dialogs. */
 integer dialog_channel = -623424;
 
+/* ID of the JSON-RPC request to pmp for playback info. */
 string info_request;
+
+/* Listener for dialogs. */
 integer listener;
 
+/* Dataserver query ID when reading the config notecard. */
 key notecard_query;
+
+/* The current line being read from the config notecard. */
 integer notecard_line;
 
+/* The current page of the song menu. */
 integer page;
 
+/* JSON-RPC functions. */
 jsonrpc_link_notification(integer link, string method, string params_type, list params)
 {
     llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "method", method, "params", llList2Json(params_type, params)]), NULL_KEY);
@@ -118,6 +126,7 @@ set_playback_hover_text(string title, float time, float duration, integer paused
     set_hover_text(status + ": " + title + " (🔊 " + vol + "%)\n" + time_to_string(time) + " " + bar + " " + time_to_string(duration));
 }
 
+/* Process a line from the config notecard. */
 process_config(string data)
 {
     /* Ignore comments. */
@@ -176,6 +185,7 @@ process_config(string data)
     }
 }
 
+/* Get the list of song notecards from the inventory. */
 list song_list()
 {
     list songs;
@@ -196,6 +206,7 @@ list song_list()
     return songs;
 }
 
+/* Open the song menu dialog. */
 open_song_menu(key id)
 {
     list songs = song_list();
@@ -216,7 +227,7 @@ open_song_menu(key id)
 
     llListenRemove(listener);
     listener = llListen(dialog_channel, "", id, "");
-    llDialog(id, text, ["<", "STOP", ">"] + buttons, dialog_channel);
+    llDialog(id, text, ["<", "⏹️ STOP", ">"] + buttons, dialog_channel);
 }
 
 default
@@ -273,7 +284,7 @@ default
         integer num_songs = llGetListLength(songs);
         integer total_pages = llCeil(num_songs / 9.0);
 
-        if (message == "STOP")
+        if (message == "⏹️ STOP")
         {
             jsonrpc_link_notification(LINK_SET, "pmp:stop", JSON_OBJECT, []);
         }
