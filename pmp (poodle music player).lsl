@@ -95,7 +95,6 @@ play_song(string name, integer loop, float vol)
         clips = [];
         repeat = loop;
         volume = vol;
-        set_hover_text("Loading song...");
         notecards = [name];
         read_notecards();
     }
@@ -105,12 +104,6 @@ play_song(string name, integer loop, float vol)
 start_song()
 {
     duration = (last_clip - first_clip - 1) * clip_len + last_clip_len;
-    
-    /* Set hover text */
-    if (hover_text)
-    {
-        set_hover_text("Playing: " + title);
-    }
     
     /* If the song has an intro clip, play that first */
     if (intro_clip != -1)
@@ -141,9 +134,6 @@ stop_song()
     
     /* Send out a message to linked prims that the song has ended or was stopped */
     jsonrpc_link_notification(LINK_SET, "pmp:song-ended", JSON_OBJECT, ["title", title]);
-    
-    /* Clear the hover text */
-    set_hover_text("");
     
     /* Stop any currently playing clip */
     llStopSound();
@@ -222,19 +212,7 @@ process_config(string data)
     string setting_name = llList2String(setting, 0);
     string setting_value = llList2String(setting, 1);
     
-    if (setting_name == "hover_text")
-    {
-        hover_text = (integer) setting_value;
-    }
-    else if (setting_name == "hover_text_color")
-    {
-        hover_text_color = (vector) setting_value;
-    }
-    else if (setting_name == "hover_text_alpha")
-    {
-        hover_text_alpha = (float) setting_value;
-    }
-    else if (setting_name == "default_volume")
+    if (setting_name == "default_volume")
     {
         default_volume = (float) setting_value;
     }
