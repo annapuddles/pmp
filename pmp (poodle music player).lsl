@@ -1,27 +1,38 @@
 /* The version number of pmp. */
-string version = "1.0.0";
+string version = "2.0.0";
+
+/* CONFIGURATION */
 
 /* The name of the notecard containing the configuration settings */
-string CONFIG_NAME = "pmp config";
+string config_notecard_name = "pmp config";
 
-/* Configurable options */
-integer debug = FALSE;
-integer hover_text = TRUE;
+/* Whether to use hover text at all. */
+integer hover_text = FALSE;
+
+/* The color of the hover text. */
 vector hover_text_color = <1, 1, 1>;
+
+/* The transparency of the hover text. */
 float hover_text_alpha = 1;
+
+/* The default volume to play songs at. */
 float default_volume = 1.0;
-integer progress_bar_size = 30;
-string progress_bar_start = "|";
-string progress_bar_fill = "-";
-string progress_bar_head = "[]";
-string progress_bar_end = "|";
+
+/* How often to check if the next clip should be played. */
+float update_interval = 0.01;
+
+/* END OF CONFIGURATION */
+
+/* How much time is remaining before the next clip plays. */
+float time_remaining;
+
+/* The last time the timer event fired. */
+float last_timer;
 
 /* Stored lists of clips and songs */
 list clips;
-list songs;
 
 /* Current song information */
-integer song = -1;
 string title;
 integer intro_clip;
 float intro_clip_len;
@@ -35,6 +46,7 @@ integer clip;
 float duration;
 integer paused;
 
+/* JSON-RPC functions */
 string jsonrpc_link_request(integer link, string method, string params_type, list params, string id)
 {
     if (id == "") id = (string) llGenerateKey();
@@ -62,55 +74,37 @@ set_hover_text(string text)
 /* Preload a sound clip by playing it silently on a linked prim so it loads faster when actually playing it */
 preload(integer index)
 {
-    jsonrpc_link_notification(LINK_SET, "pmp:preload", JSON_OBJECT, ["sound", llList2Key(clips, index)]);;
+    key clip_id = llList2Key(clips, index);
+    
+    if (clip_id)
+    {
+        jsonrpc_link_notification(LINK_SET, "pmp:preload", JSON_OBJECT, ["sound", clip_id]);
+    }
 }
 
-/* Play a sound clip by its index in the stored clips list */
-play_clip(integer index)
+/* Read a song notecard into memory and start the song. */
+play_song(string name, integer loop, float vol)
 {
-    llPlaySound(llList2Key(clips, index), volume);
+    if (title != "")
+    {
+        stop_song();
+    }
+    
+    if (llGetInventoryType(name) == INVENTORY_NOTECARD)
+    {
+        clips = [];
+        repeat = loop;
+        volume = vol;
+        set_hover_text("Loading song...");
+        notecards = [name];
+        read_notecards();
+    }
 }
 
 /* Start playing a song */
-start_song(string name, integer loop, float vol)
+start_song()
 {
-    /* Locate the song in the stored songs list */
-    integer index = llListFindList(songs, [name]);
-    
-    /* If the song could not be found, exit */
-    if (index == -1)
-    {
-        if (debug)
-        {
-            llOwnerSay("Invalid song: " + name);
-        }
-        
-        return;
-    }
-    
-    /* If the song is already playing, exit */
-    if (song == index)
-    {
-        return;
-    }
-
-    /* Set the current song details */
-    song = index;
-    title = llList2String(songs, index++);
-    intro_clip = llList2Integer(songs, index++);
-    intro_clip_len = llList2Float(songs, index++);
-    first_clip = llList2Integer(songs, index++);
-    last_clip = llList2Integer(songs, index++);
-    clip_len = llList2Float(songs, index++);
-    last_clip_len = llList2Float(songs, index++);
-    repeat = loop;
-    volume = vol;
     duration = (last_clip - first_clip - 1) * clip_len + last_clip_len;
-
-    if (debug)
-    {
-        llOwnerSay("Playing " + title);
-    }
     
     /* Set hover text */
     if (hover_text)
@@ -133,7 +127,8 @@ start_song(string name, integer loop, float vol)
     preload(clip);
     
     /* Give the clip a second to preload and start the timer event */
-    llSetTimerEvent(1.0);
+    time_remaining = 1.0;
+    llSetTimerEvent(update_interval);
     
     /* Send out a message to linked prims that a song has been started */
     jsonrpc_link_notification(LINK_SET, "pmp:song-started", JSON_OBJECT, ["title", title]);
@@ -142,22 +137,10 @@ start_song(string name, integer loop, float vol)
 /* Stop the current song from playing */
 stop_song()
 {
-    /* If no song is playing, exit */
-    if (song == -1)
-    {
-        return;
-    }
+    clips = [];
     
     /* Send out a message to linked prims that the song has ended or was stopped */
     jsonrpc_link_notification(LINK_SET, "pmp:song-ended", JSON_OBJECT, ["title", title]);
-    
-    /* Unset the current song details */
-    song = -1;
-    
-    if (debug)
-    {
-        llOwnerSay("Stopping");
-    }
     
     /* Clear the hover text */
     set_hover_text("");
@@ -167,60 +150,13 @@ stop_song()
     
     /* Stop the timer event */
     llSetTimerEvent(0);
-}
-
-/* Pause the current song */
-pause_song()
-{
-    if (song == -1)
-    {
-        return;
-    }
     
-    if (paused)
-    {
-        return;
-    }
-
-    paused = TRUE;
-    llStopSound();
-    llSetTimerEvent(0);
-    
-    /* Go back to the previous clip */
-    if (clip > first_clip)
-    {
-        --clip;
-    }
-    
-    /* Update the hover text if applicable */
-    if (hover_text)
-    {
-        set_playback_hover_text();
-    }
-}
-
-/* Resume playing the current song */
-resume_song()
-{
-    if (song == -1)
-    {
-        return;
-    }
-    
-    if (!paused)
-    {
-        return;
-    }
-
-    paused = FALSE;
-    preload(clip);
-    llSetTimerEvent(1.0);
-}
-
-/* Check whether any song is currently playing */
-integer is_song_playing()
-{
-    return song != -1;
+    /* Reset data. */
+    title = "";
+    clip = 0;
+    first_clip = 0;
+    last_clip = 0;
+    duration = 0;
 }
 
 /* These variables store the details of the configuration and song notecards as they're being read in the dataserver event */
@@ -228,55 +164,36 @@ list notecards;
 key notecard_query_id;
 integer notecard_index;
 integer notecard_line;
-integer notecards_read = FALSE;
 
-/* Read songs from notecards in the inventory. */
+/* Whether the script has finished initializing. */
+integer initialized = FALSE;
+
+/* Read notecards specified in 'notecards' list from the inventory. */
 read_notecards()
 {
-    if (debug)
-    {
-        llOwnerSay("Initializing...");
-    }
+    /* Reset indexes. */
+    notecard_index = 0;
+    notecard_line = 0;
+    first_clip = 0;
+    last_clip = 0;
     
+    /* Start reading the first line of the first notecard. */
+    notecard_query_id = llGetNotecardLine(llList2String(notecards, notecard_index), notecard_line);
+}
+
+/* Initialize the script and read the configuration notecard. */
+initialize()
+{
     set_hover_text("Initializing...");
 
     /* Reset stored clips and songs. */
-    notecards_read = FALSE;
+    initialized = FALSE;
     clips = [];
-    songs = [];
-
-    /* Get the total number of notecards in the inventory. */
-    integer total = llGetInventoryNumber(INVENTORY_NOTECARD);
     
-    /* Create a list of all the notecard names that need to be read. */
-    notecards = [];
-    integer i;
-    for (i = 0; i < total; ++i)
+    if (llGetInventoryType(config_notecard_name) == INVENTORY_NOTECARD)
     {
-        string name = llGetInventoryName(INVENTORY_NOTECARD, i);
-        
-        /* Ensure the configuration notecard is read first */
-        if (name == CONFIG_NAME)
-        {
-            notecards = [name] + notecards;
-        }
-        else
-        {
-            notecards += name;
-        }
-    }
-    
-    /* If there are any new notecards to read, begin the process */
-    if (llGetListLength(notecards) > 0)
-    {
-        /* Reset indexes. */
-        notecard_index = 0;
-        notecard_line = 0;
-        first_clip = 0;
-        last_clip = 0;
-        
-        /* Start reading the first line of the first notecard. */
-        notecard_query_id = llGetNotecardLine(llList2String(notecards, notecard_index), notecard_line);
+        notecards = [config_notecard_name];
+        read_notecards();
     }
     else
     {
@@ -296,6 +213,12 @@ process_config(string data)
     /* Each line will be in the form of: setting_name = setting_value */
     list setting = llParseString2List(data, [" = "], []);
     
+    /* Ignore malformed lines. */
+    if (llGetListLength(setting) != 2)
+    {
+        return;
+    }
+    
     string setting_name = llList2String(setting, 0);
     string setting_value = llList2String(setting, 1);
     
@@ -311,181 +234,9 @@ process_config(string data)
     {
         hover_text_alpha = (float) setting_value;
     }
-    else if (setting_name == "debug")
-    {
-        debug = (integer) setting_value;
-    }
     else if (setting_name == "default_volume")
     {
         default_volume = (float) setting_value;
-    }
-    else if (setting_name == "progress_bar_size")
-    {
-        progress_bar_size = (integer) setting_value;
-    }
-    else if (setting_name == "progress_bar_end")
-    {
-        progress_bar_end = setting_value;
-    }
-    else if (setting_name == "progress_bar_fill")
-    {
-        progress_bar_fill = setting_value;
-    }
-    else if (setting_name == "progress_bar_head")
-    {
-        progress_bar_head = setting_value;
-    }
-    else if (setting_name == "progress_bar_start")
-    {
-        progress_bar_start = setting_value;
-    }
-}
-
-/* Check if the music player is ready to be used. */
-integer is_ready()
-{
-    return notecards_read;
-}
-
-/* Get the current song title, or empty string if no song is playing */
-string get_title()
-{
-    if (song == -1)
-    {
-        return "";
-    }
-     
-    return title;
-}
-
-/* Get a percentage of progress in the current song as a value from 0.0 to 1.0, or -1 if no song is playing */
-float get_progress()
-{
-    if (song == -1)
-    {
-        return -1;
-    }
-
-    return (float) (clip - first_clip) / (float) (last_clip - first_clip);
-}
-
-/* Get the current time of the current song in seconds, or -1 if no song is playing */
-float get_time()
-{
-    if (song == -1)
-    {
-        return -1;
-    }
-
-    return (clip - first_clip) * clip_len;
-}
-
-/* Set the current playback time in seconds with error checking */
-set_time(float time)
-{
-    if (song == -1)
-    {
-        return;
-    }
-    
-    if (time < 0.0)
-    {
-        time = 0.0;
-    }
-    else if (time > duration)
-    {
-        time = duration;
-    }
-    
-    clip = first_clip + (integer) (time / clip_len);
-
-    if (debug)
-    {
-        llOwnerSay("Time set to " + (string) time);
-    }
-    
-    preload(clip);
-    
-    llSetTimerEvent(1.0);
-}
-
-/* Get the current song duration in seconds, or -1 if no song is playing */
-float get_duration()
-{
-    if (song == -1)
-    {
-        return -1;
-    }
-    
-    return duration;
-}
-
-/* Convert an integer to a string with left zero padding */
-string zero_pad(integer n)
-{
-    if (n < 10)
-    {
-        return "0" + (string) n;
-    }
-    else
-    {
-        return (string) n;
-    }
-}
-
-/* Convert a time in seconds to an HH:MM:SS timecode string */
-string time_to_string(float time)
-{
-    integer t = (integer) time;
-    integer s = t % 60;
-    integer m = (t / 60) % 60;
-    integer h = t / 3600;
-    
-    string s_s;
-    string m_s;
-    string h_s;
-    
-    return zero_pad(h) + ":" + zero_pad(m) + ":" + zero_pad(s);
-}
-
-/* Get the volume setting, either the current song's volume, or the default volume if no song is playing */
-float get_volume()
-{
-    if (song == -1)
-    {
-        return default_volume;
-    }
-    else
-    {
-        return volume;
-    }
-}
-
-/* Set the volume settings with error checking */
-set_volume(float vol)
-{
-    if (vol >= 0.0 && vol <= 1.0)
-    {
-        volume = vol;
-        default_volume = vol;
-        
-        if (debug)
-        {
-            llOwnerSay("Volume set to " + (string) volume);
-        }
-    }
-    else
-    {
-        if (debug)
-        {
-            llOwnerSay("Invalid volume value: " + (string) volume);
-        }
-    }
-    
-    /* Update the hover text if applicable */
-    if (hover_text)
-    {
-        set_playback_hover_text();
     }
 }
 
@@ -493,7 +244,7 @@ set_volume(float vol)
 process_message(integer sender, string message)
 {
     /* If we haven't finished initializing, ignore the message */
-    if (!is_ready())
+    if (!initialized)
     {
         return;
     }
@@ -537,159 +288,217 @@ process_message(integer sender, string message)
             volume = default_volume;
         }
         
-        start_song(title, loop, volume);
+        play_song(title, loop, volume);
     }
-    else if (method == "pmp:is-ready")
+    else if (method == "pmp:ready")
     {
         string id = llJsonGetValue(message, ["id"]);
         
-        jsonrpc_link_response(sender, message, (string) is_ready());
-    }
-    else if (method == "pmp:current-song")
-    {
-        jsonrpc_link_response(sender, message, get_title());
+        jsonrpc_link_response(sender, message, (string) initialized);
     }
     else if (method == "pmp:set-volume")
     {
-        float volume = (float) llJsonGetValue(message, ["params", "volume"]);
-        set_volume(volume);
-    }
-    else if (method == "pmp:get-volume")
-    {
-        jsonrpc_link_response(sender, message, (string) get_volume());
-    }
-    else if (method == "pmp:get-duration")
-    {
-        jsonrpc_link_response(sender, message, (string) get_duration());
-    }
-    else if (method == "pmp:get-time")
-    {
-        jsonrpc_link_response(sender, message, (string) get_time());
+        float vol = (float) llJsonGetValue(message, ["params", "volume"]);
+        
+        if (vol >= 0.0 && vol <= 1.0)
+        {
+            volume = vol;
+            default_volume = vol;
+        }
     }
     else if (method == "pmp:set-time")
     {
         float time = (float) llJsonGetValue(message, ["params", "time"]);
-        set_time(time);
-    }
-    else if (method == "pmp:get-progress")
-    {
-        jsonrpc_link_response(sender, message, (string) get_progress());
+
+        if (time < 0.0)
+        {
+            time = 0.0;
+        }
+        else if (time > duration)
+        {
+            time = duration;
+        }
+        
+        clip = first_clip + (integer) (time / clip_len);
+        
+        preload(clip);
+        
+        time_remaining = 1.0;
+        llSetTimerEvent(update_interval);
     }
     else if (method == "pmp:pause")
     {
-        pause_song();
+        if (paused)
+        {
+            return;
+        }
+    
+        paused = TRUE;
+        llStopSound();
+        llSetTimerEvent(0);
+        
+        /* Go back to the previous clip */
+        if (clip > first_clip)
+        {
+            --clip;
+        }
     }
     else if (method == "pmp:resume")
     {
-        resume_song();
+        if (!paused)
+        {
+            return;
+        }
+    
+        paused = FALSE;
+        preload(clip);
+        time_remaining = 1.0;
+        llSetTimerEvent(update_interval);
     }
-    else if (method == "pmp:is-paused")
+    else if (method == "pmp:info")
     {
-        jsonrpc_link_response(sender, message, (string) paused);
+        float t = (clip - first_clip) * clip_len - time_remaining;
+        
+        if (t < 0)
+        {
+            t = 0;
+        }
+        
+        jsonrpc_link_response(sender, message, llList2Json(JSON_OBJECT, [
+            "title", title,
+            "time", t,
+            "duration", duration,
+            "paused", paused,
+            "volume", volume
+        ]));
     }
 }
 
-/* Set the playback status hover text */
-set_playback_hover_text()
+/* Parse a line of a notecard being read. */
+parse_notecard_line(string name, string data)
 {
-    /* Calculate the position of the head on the progress bar */
-    integer head_pos = (integer) (get_progress() * progress_bar_size);
-
-    /* Create the progress bar string */
-    string bar = progress_bar_start;
-
-    integer i;
-
-    for (i = 0; i < head_pos; ++i)
+    /* If this is the first line... */
+    if (notecard_line == 0)
     {
-        bar += progress_bar_fill;
+        /* If this is the first line of the configuration file, handle it the same as any other line */
+        if (name == config_notecard_name)
+        {
+            process_config(data);
+        }
+        /* If this is the first line of a song notecard, then read the clip length details */
+        else
+        {
+            list info = llParseString2List(data, [" "], []);
+            
+            integer len = llGetListLength(info);
+            
+            if (len == 1)
+            {
+                intro_clip = -1;
+                intro_clip_len = 0;
+                clip_len = (float) llList2String(info, 0);
+                last_clip_len = (float) llList2String(info, 0);
+            }
+            else if (len == 2)
+            {
+                intro_clip = -1;
+                intro_clip_len = 0;
+                clip_len = (float) llList2String(info, 0);
+                last_clip_len = (float) llList2String(info, 1);
+            }
+            else if (len == 3)
+            {
+                intro_clip = first_clip;
+                intro_clip_len = (float) llList2String(info, 0);
+                clip_len = (float) llList2String(info, 1);
+                last_clip_len = (float) llList2String(info, 2);
+                
+                ++first_clip;
+            }
+        }
     }
-
-    bar += progress_bar_head;
-
-    for (; i < progress_bar_size; ++i)
-    {
-        bar += progress_bar_fill;
-    }
-
-    bar += progress_bar_end;
-    
-    string vol = (string) ((integer) (volume * 100));
-    
-    string status;
-    
-    if (paused)
-    {
-        status = "Paused";
-    }
+    /* If this is any other line than the first... */
     else
     {
-        status = "Playing";
-    }
-
-    /* Set the hover text */
-    set_hover_text(status + ": " + title + " (" + vol + "%)\n" + time_to_string(get_time()) + " " + bar + " " + time_to_string(duration));
+        /* Handle lines in the configuration file the same way */
+        if (name == config_notecard_name)
+        {
+            process_config(data);
+        }
+        /* All other lines in a song notecard will be the UUIDs of each sound clip, so add them to the stored clips list */
+        else
+        {
+            clips += (key) data;
+            ++last_clip;
+        }
+    }   
 }
 
 default
 {
     state_entry()
     {
-        read_notecards();
+        initialize();
     }
     
     timer()
     {
-        /* If the clip is -1, the song has ended, so stop playing and exit */
-        if (clip == -1)
-        {
-            stop_song();
-            return;
-        }
+        time_remaining -= llGetTime() - last_timer;
         
-        /* Set the playback status hover text */
-        if (hover_text)
+        if (time_remaining <= 0)
         {
-            set_playback_hover_text();
-        }
-        
-        /* Play the current sound clip */
-        play_clip(clip);
-        
-        /* If the current clip is the intro clip, the next clip is the first main clip */
-        if (clip == intro_clip)
-        {
-            clip = first_clip;
-            llSetTimerEvent(intro_clip_len);
-        }
-        /* If the current clip is any of the clips except the last, the next clip is the next index up. */
-        else if (clip < last_clip)
-        {
-            clip = clip + 1;
-            llSetTimerEvent(clip_len);
-        }
-        /* Otherwise, if the current clip is the last clip... */
-        else
-        {
-            /* If loop mode is on, go back to the first main clip */
-            if (repeat)
+            /* If the clip is -1, the song has ended, so stop playing and exit */
+            if (clip == -1)
+            {
+                stop_song();
+                return;
+            }
+            
+            /* Play the current sound clip */
+            key clip_id = llList2Key(clips, clip);
+            
+            if (clip_id)
+            {
+                llPlaySound(clip_id, volume);
+            }
+            
+            /* If the current clip is the intro clip, the next clip is the first main clip */
+            if (clip == intro_clip)
             {
                 clip = first_clip;
+                time_remaining = intro_clip_len;
             }
-            /* Otherwise, set clip to -1 so the next timer event will end the song */
+            /* If the current clip is any of the clips except the last, the next clip is the next index up. */
+            else if (clip < last_clip)
+            {
+                clip = clip + 1;
+                time_remaining = clip_len;
+            }
+            /* Otherwise, if the current clip is the last clip... */
             else
             {
-                clip = -1;
+                /* If loop mode is on, go back to the first main clip */
+                if (repeat)
+                {
+                    clip = first_clip;
+                }
+                /* Otherwise, set clip to -1 so the next timer event will end the song */
+                else
+                {
+                    clip = -1;
+                }
+                
+                time_remaining = last_clip_len;
             }
-
-            llSetTimerEvent(last_clip_len);
+            
+            /* Preload the next clip unless there is none */
+            if (clip != -1)
+            {
+                preload(clip);
+            }
         }
         
-        /* Preload the next clip unless there is none */
-        if (clip != -1)
-        {
-            preload(clip);
-        }
+        last_timer = llGetTime();
     }
     
     dataserver(key request_id, string data)
@@ -699,144 +508,51 @@ default
         {
             return;
         }
-        
+
         /* Get the name of the current notecard that is being read */
         string name = llList2String(notecards, notecard_index);
         
-        /* If the end of the notecard has been reached... */
+        while (data != EOF && data != NAK)
+        {
+            parse_notecard_line(name, data);
+            data = llGetNotecardLineSync(name, ++notecard_line);
+        }
+
+        if (data == NAK)
+        {
+            notecard_query_id = llGetNotecardLine(name, ++notecard_line);
+        }
+
         if (data == EOF)
         {
             /* If the notecard being read is the configuration notecard, there's nothing else to do after reaching the end */
-            if (name == CONFIG_NAME)
+            if (name != config_notecard_name)
             {
-                /* If in debug mode, print out the values of all the configuration settings */
-                if (debug)
-                {
-                    llOwnerSay("Version: " + version);
-                    llOwnerSay("Configuration:");
-                    llOwnerSay("  hover_text = " + (string) hover_text);
-                    llOwnerSay("  hover_text_color = " + (string) hover_text_color);
-                    llOwnerSay("  hover_text_alpha = " + (string) hover_text_alpha);
-                    llOwnerSay("  default_volume = " + (string) default_volume);
-                    llOwnerSay("  progress_bar_size = " + (string) progress_bar_size);
-                    llOwnerSay("  progress_bar_start = " + progress_bar_start);
-                    llOwnerSay("  progress_bar_fill = " + progress_bar_fill);
-                    llOwnerSay("  progress_bar_head = " + progress_bar_head);
-                    llOwnerSay("  progress_bar_end = " + progress_bar_end);
-                }
+                title = name;
+                start_song();
             }
-            /* If the notecard is a song notecard, add the song to the stored song list */
-            else
-            {
-                /* Append the song to the stored songs list with the details read from the notecard */
-                songs += [name, intro_clip, intro_clip_len, first_clip, last_clip - 1, clip_len, last_clip_len];
-                
-                /* If in debug mode, print out the details read from the song notecard */
-                if (debug)
-                {
-                    llOwnerSay("  title: " + name);
-                    llOwnerSay("  intro_clip: " + (string) intro_clip);
-                    llOwnerSay("  intro_clip_len: " + (string) intro_clip_len);
-                    llOwnerSay("  first_clip: " + (string) first_clip);
-                    llOwnerSay("  last_clip: " + (string) (last_clip - 1));
-                    llOwnerSay("  clip_len: " + (string) clip_len);
-                    llOwnerSay("  last_clip_len: " + (string) last_clip_len);
-                }
-                
-                /* Set the first clip of the next song to the index after the last clip of this song */
-                first_clip = last_clip;
-            }
-            
+                        
             /* Move to the next notecard in the queue */
             ++notecard_index;
             
             /* If all the notecards have been read, finish the initialization process */
             if (notecard_index >= llGetListLength(notecards))
             {
-                if (debug)
-                {
-                    llOwnerSay("Finished reading notecards.");
-                }
-                
                 set_hover_text("");
-                
-                notecards_read = TRUE;
-                
-                jsonrpc_link_notification(LINK_SET, "pmp:startup-complete", JSON_OBJECT, []);
+                                
+                if (!initialized)
+                {
+                    initialized = TRUE;
+                    jsonrpc_link_notification(LINK_SET, "pmp:startup-complete", JSON_OBJECT, []);
+                    llOwnerSay("Free memory: " + (string) llGetFreeMemory());
+                }
 
                 return;
             }
             
             /* Get the name of the next notecard to read and reset the line counter to 0 */
-            name = llList2String(notecards, notecard_index);            
-            notecard_line = 0;            
-        }
-        /* If this is a line from a notecard, process it */
-        else
-        {
-            /* If this is the first line... */
-            if (notecard_line == 0)
-            {
-                if (debug)
-                {
-                    llOwnerSay("Reading " + name + "...");
-                }
-                
-                /* If this is the first line of the configuration file, handle it the same as any other line */
-                if (name == CONFIG_NAME)
-                {
-                    process_config(data);
-                }
-                /* If this is the first line of a song notecard, then read the clip length details */
-                else
-                {
-                    list info = llParseString2List(data, [" "], []);
-                    
-                    integer len = llGetListLength(info);
-                    
-                    if (len == 1)
-                    {
-                        intro_clip = -1;
-                        intro_clip_len = 0;
-                        clip_len = (float) llList2String(info, 0);
-                        last_clip_len = (float) llList2String(info, 0);
-                    }
-                    else if (len == 2)
-                    {
-                        intro_clip = -1;
-                        intro_clip_len = 0;
-                        clip_len = (float) llList2String(info, 0);
-                        last_clip_len = (float) llList2String(info, 1);
-                    }
-                    else if (len == 3)
-                    {
-                        intro_clip = first_clip;
-                        intro_clip_len = (float) llList2String(info, 0);
-                        clip_len = (float) llList2String(info, 1);
-                        last_clip_len = (float) llList2String(info, 2);
-                        
-                        ++first_clip;
-                    }
-                }
-            }
-            /* If this is any other line than the first... */
-            else
-            {
-                /* Handle lines in the configuration file the same way */
-                if (name == CONFIG_NAME)
-                {
-                    process_config(data);
-                }
-                /* All other lines in a song notecard will be the UUIDs of each sound clip, so add them to the stored clips list */
-                else
-                {
-                    clips += (key) data;
-                    ++last_clip;
-                }
-            }
-            
-            /* Move to the next line in the notecard */
-            ++notecard_line;
+            name = llList2String(notecards, notecard_index);
+            notecard_line = 0;
         }
         
         /* Read the next line in the notecard */
@@ -847,15 +563,5 @@ default
     link_message(integer sender, integer num, string str, key id)
     {
         process_message(sender, str);
-    }
-    
-    /* If the inventory changes, re-initialize to update the configuration and list of songs */
-    changed(integer change)
-    {
-        if (change & CHANGED_INVENTORY)
-        {
-            stop_song();
-            read_notecards();
-        }
     }
 }
