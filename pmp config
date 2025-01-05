@@ -20,10 +20,7 @@ progress_bar_start = |
 progress_bar_fill = -
 
 # The characters used to indicate the current position on the progress bar
-progress_bar_head = []
+progress_bar_head = █
 
 # The characters used as the right border of the progress bar
 progress_bar_end = |
-
-# Whether to display extra debugging messages
-debug = 0
