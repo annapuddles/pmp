@@ -6,15 +6,6 @@ string version = "2.0.0";
 /* The name of the notecard containing the configuration settings */
 string config_notecard_name = "pmp config";
 
-/* Whether to use hover text at all. */
-integer hover_text = FALSE;
-
-/* The color of the hover text. */
-vector hover_text_color = <1, 1, 1>;
-
-/* The transparency of the hover text. */
-float hover_text_alpha = 1;
-
 /* The default volume to play songs at. */
 float default_volume = 1.0;
 
@@ -72,12 +63,6 @@ jsonrpc_link_response(integer link, string request, string result)
 {
     string id = llJsonGetValue(request, ["id"]);
     llMessageLinked(link, 0, llList2Json(JSON_OBJECT, ["jsonrpc", "2.0", "id", id, "result", result]), NULL_KEY);
-}
-
-/* Set the hover text using the configured color and alpha */
-set_hover_text(string text)
-{
-    llSetText(text, hover_text_color, hover_text_alpha);
 }
 
 /* Preload a sound clip by playing it silently on a linked prim so it loads faster when actually playing it */
@@ -166,7 +151,7 @@ stop_song()
 /* Initialize the script and read the configuration notecard. */
 initialize()
 {
-    set_hover_text("Initializing...");
+    llSetText("Initializing...", <1, 1, 1>, 1);
 
     /* Reset stored clips and songs. */
     initialized = FALSE;
@@ -178,7 +163,7 @@ initialize()
     }
     else
     {
-        set_hover_text("");
+        llSetText("", ZERO_VECTOR, 0);
     }
 }
 
@@ -493,7 +478,7 @@ default
         {
             if (notecard_name == config_notecard_name)
             {
-                set_hover_text("");
+                llSetText("", ZERO_VECTOR, 0);
                 
                 if (!initialized)
                 {
