@@ -1,6 +1,9 @@
 # The default volume that songs are played at
 default_volume = 1.0
 
+
+# The following settings apply only to the pmp ui script.
+
 # Whether to display hover text with the song name and progress
 hover_text = 1
 
