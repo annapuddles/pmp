@@ -46,6 +46,15 @@ integer clip;
 float duration;
 integer paused;
 
+/* These variables store the details of the configuration and song notecards as they're being read in the dataserver event */
+string notecard_name;
+key notecard_query_id;
+integer notecard_index;
+integer notecard_line;
+
+/* Whether the script has finished initializing. */
+integer initialized = FALSE;
+
 /* JSON-RPC functions */
 string jsonrpc_link_request(integer link, string method, string params_type, list params, string id)
 {
@@ -95,8 +104,11 @@ play_song(string name, integer loop, float vol)
         clips = [];
         repeat = loop;
         volume = vol;
-        notecards = [name];
-        read_notecards();
+        clip = 0;
+        first_clip = 0;
+        last_clip = 0;
+        
+        notecard_query_id = llGetNotecardLine(notecard_name = name, notecard_line = 0);
     }
 }
 
@@ -118,6 +130,8 @@ start_song()
     
     /* Preload the first clip so it will load faster */
     preload(clip);
+    
+    paused = FALSE;
     
     /* Give the clip a second to preload and start the timer event */
     time_remaining = 1.0;
@@ -149,28 +163,6 @@ stop_song()
     duration = 0;
 }
 
-/* These variables store the details of the configuration and song notecards as they're being read in the dataserver event */
-list notecards;
-key notecard_query_id;
-integer notecard_index;
-integer notecard_line;
-
-/* Whether the script has finished initializing. */
-integer initialized = FALSE;
-
-/* Read notecards specified in 'notecards' list from the inventory. */
-read_notecards()
-{
-    /* Reset indexes. */
-    notecard_index = 0;
-    notecard_line = 0;
-    first_clip = 0;
-    last_clip = 0;
-    
-    /* Start reading the first line of the first notecard. */
-    notecard_query_id = llGetNotecardLine(llList2String(notecards, notecard_index), notecard_line);
-}
-
 /* Initialize the script and read the configuration notecard. */
 initialize()
 {
@@ -182,8 +174,7 @@ initialize()
     
     if (llGetInventoryType(config_notecard_name) == INVENTORY_NOTECARD)
     {
-        notecards = [config_notecard_name];
-        read_notecards();
+        notecard_query_id = llGetNotecardLine(notecard_name = config_notecard_name, notecard_line = 0);
     }
     else
     {
@@ -353,13 +344,13 @@ process_message(integer sender, string message)
 }
 
 /* Parse a line of a notecard being read. */
-parse_notecard_line(string name, string data)
+parse_notecard_line(string data)
 {
     /* If this is the first line... */
     if (notecard_line == 0)
     {
         /* If this is the first line of the configuration file, handle it the same as any other line */
-        if (name == config_notecard_name)
+        if (notecard_name == config_notecard_name)
         {
             process_config(data);
         }
@@ -399,7 +390,7 @@ parse_notecard_line(string name, string data)
     else
     {
         /* Handle lines in the configuration file the same way */
-        if (name == config_notecard_name)
+        if (notecard_name == config_notecard_name)
         {
             process_config(data);
         }
@@ -486,55 +477,37 @@ default
         {
             return;
         }
-
-        /* Get the name of the current notecard that is being read */
-        string name = llList2String(notecards, notecard_index);
         
         while (data != EOF && data != NAK)
         {
-            parse_notecard_line(name, data);
-            data = llGetNotecardLineSync(name, ++notecard_line);
+            parse_notecard_line(data);
+            data = llGetNotecardLineSync(notecard_name, ++notecard_line);
         }
 
         if (data == NAK)
         {
-            notecard_query_id = llGetNotecardLine(name, ++notecard_line);
+            notecard_query_id = llGetNotecardLine(notecard_name, notecard_line);
         }
 
         if (data == EOF)
         {
-            /* If the notecard being read is the configuration notecard, there's nothing else to do after reaching the end */
-            if (name != config_notecard_name)
-            {
-                title = name;
-                start_song();
-            }
-                        
-            /* Move to the next notecard in the queue */
-            ++notecard_index;
-            
-            /* If all the notecards have been read, finish the initialization process */
-            if (notecard_index >= llGetListLength(notecards))
+            if (notecard_name == config_notecard_name)
             {
                 set_hover_text("");
-                                
+                
                 if (!initialized)
                 {
                     initialized = TRUE;
                     jsonrpc_link_notification(LINK_SET, "pmp:startup-complete", JSON_OBJECT, []);
                     llOwnerSay("Free memory: " + (string) llGetFreeMemory());
                 }
-
-                return;
             }
-            
-            /* Get the name of the next notecard to read and reset the line counter to 0 */
-            name = llList2String(notecards, notecard_index);
-            notecard_line = 0;
+            else
+            {
+                title = notecard_name;
+                start_song();
+            }            
         }
-        
-        /* Read the next line in the notecard */
-        notecard_query_id = llGetNotecardLine(name, notecard_line);
     }
     
     /* Process commands from linked prims */
