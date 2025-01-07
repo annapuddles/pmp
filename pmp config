@@ -1,3 +1,9 @@
+# pmp (poodle music player) configuration
+#
+# Settings must be specified in the format of:
+#     name = value
+# The spaces around the = are mandatory.
+
 # The default volume that songs are played at
 default_volume = 1.0
 
