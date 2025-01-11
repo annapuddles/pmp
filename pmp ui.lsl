@@ -1,21 +1,49 @@
-/* pmp ui - Example user interface for pmp. */
+/* pmp ui v1.1.0 - Example user interface for pmp. */
+
+/* CONFIGURATION */
 
 /* The name of the notecard containing the configuration settings */
 string config_notecard_name = "pmp config";
 
-/* Configurable options */
+/* Whether to display hover text with the song status. */
 integer hover_text = FALSE;
+
+/* The color of the hover text. */
 vector hover_text_color = <1, 1, 1>;
+
+/* The transparency of the hover text. */
 float hover_text_alpha = 1;
-float default_volume = 1;
+
+/* The number of characters displayed in the progress bar. */
 integer progress_bar_size = 30;
+
+/* The character at the beginning of the progress bar. */
 string progress_bar_start = "|";
+
+/* The character at the end of the progress bar. */
 string progress_bar_end = "|";
+
+/* The character used to fill the empty space in the progress bar. */
 string progress_bar_fill = "-";
+
+/* The character used to indicate the progress of the current song. */
 string progress_bar_head = "█";
 
 /* Channel used for dialogs. */
 integer dialog_channel = -623424;
+
+/* Labels for dialog buttons. */
+string stop_label = "⏹️ stop";
+string pause_label = "⏸️ pause";
+string seek_backward_label = "⏪ seek -";
+string seek_forward_label = "⏩ seek +";
+string volume_up_label = "🔊 vol +";
+string volume_down_label = "🔊 vol -";
+string songs_label = "🎵 songs";
+string back_label = "↩️ back";
+string close_label = "✖️ close";
+
+/* END OF CONFIGURATION */
 
 /* ID of the JSON-RPC request to pmp for playback info. */
 string info_request;
@@ -31,6 +59,9 @@ integer notecard_line;
 
 /* The current page of the song menu. */
 integer page;
+
+/* The active dialog menu. */
+integer dialog;
 
 /* JSON-RPC functions. */
 jsonrpc_link_notification(integer link, string method, string params_type, list params)
@@ -159,10 +190,6 @@ process_config(string data)
     {
         hover_text_alpha = (float) setting_value;
     }
-    else if (setting_name == "default_volume")
-    {
-        default_volume = (float) setting_value;
-    }
     else if (setting_name == "progress_bar_size")
     {
         progress_bar_size = (integer) setting_value;
@@ -227,7 +254,16 @@ open_song_menu(key id)
 
     llListenRemove(listener);
     listener = llListen(dialog_channel, "", id, "");
-    llDialog(id, text, ["<", "⏹️ STOP", ">"] + buttons, dialog_channel);
+    dialog = 1;
+    llDialog(id, text, ["<", back_label, ">"] + buttons, dialog_channel);
+}
+
+open_controls_menu(key id)
+{
+    llListenRemove(listener);
+    listener = llListen(dialog_channel, "", id, "");
+    dialog = 0;
+    llDialog(id, " ", [" ", close_label, " ", seek_backward_label, stop_label, seek_forward_label, volume_down_label, pause_label, volume_up_label, " ", songs_label, " "], dialog_channel);
 }
 
 default
@@ -273,54 +309,97 @@ default
             return;
         }
         
-        open_song_menu(toucher);
+        open_controls_menu(toucher);
     }
 
     listen(integer channel, string name, key id, string message)
     {
         llListenRemove(listener);
         
-        list songs = song_list();
-        integer num_songs = llGetListLength(songs);
-        integer total_pages = llCeil(num_songs / 9.0);
-
-        if (message == "⏹️ STOP")
+        if (dialog == 0)
         {
-            jsonrpc_link_notification(LINK_SET, "pmp:stop", JSON_OBJECT, []);
-        }
-        else if (message == "<")
-        {
-            if (page > 0)
+            if (message == songs_label)
             {
-                --page;
+                open_song_menu(id);
+                return;
+            }
+            else if (message == stop_label)
+            {
+                jsonrpc_link_notification(LINK_SET, "pmp:stop", JSON_OBJECT, []);
+            }
+            else if (message == pause_label)
+            {
+                jsonrpc_link_notification(LINK_SET, "pmp:pause", JSON_OBJECT, []);
+            }
+            else if (message == volume_down_label)
+            {
+                jsonrpc_link_notification(LINK_SET, "pmp:adjust-volume", JSON_OBJECT, ["by", -0.1]);
+            }
+            else if (message == volume_up_label)
+            {
+                jsonrpc_link_notification(LINK_SET, "pmp:adjust-volume", JSON_OBJECT, ["by", 0.1]);
+            }
+            else if (message == seek_forward_label)
+            {
+                jsonrpc_link_notification(LINK_SET, "pmp:adjust-time", JSON_OBJECT, ["by", 30]);
+            }
+            else if (message == seek_backward_label)
+            {
+                jsonrpc_link_notification(LINK_SET, "pmp:adjust-time", JSON_OBJECT, ["by", -30]);
+            }
+            else if (message == close_label)
+            {
+                return;
+            }
+            
+            open_controls_menu(id);
+        }
+        else if (dialog == 1)
+        {
+            list songs = song_list();
+            integer num_songs = llGetListLength(songs);
+            integer total_pages = llCeil(num_songs / 9.0);
+    
+            if (message == back_label)
+            {
+                open_controls_menu(id);
+            }
+            else if (message == "<")
+            {
+                if (page > 0)
+                {
+                    --page;
+                }
+                else
+                {
+                    page = total_pages - 1;
+                }
+    
+                open_song_menu(id);
+            }
+            else if (message == ">")
+            {            
+                if (page < total_pages - 1)
+                {
+                    ++page;
+                }
+                else
+                {
+                    page = 0;
+                }
+    
+                open_song_menu(id);
             }
             else
             {
-                page = total_pages - 1;
-            }
-
-            open_song_menu(id);
-        }
-        else if (message == ">")
-        {            
-            if (page < total_pages - 1)
-            {
-                ++page;
-            }
-            else
-            {
-                page = 0;
-            }
-
-            open_song_menu(id);
-        }
-        else
-        {
-            integer index = (integer) message;
-
-            if (index < num_songs)
-            {
-                jsonrpc_link_notification(LINK_SET, "pmp:play", JSON_OBJECT, ["title", llList2String(songs, index), "loop", FALSE, "volume", default_volume]);
+                integer index = (integer) message;
+    
+                if (index < num_songs)
+                {
+                    jsonrpc_link_notification(LINK_SET, "pmp:play", JSON_OBJECT, ["title", llList2String(songs, index), "loop", FALSE]);
+                }
+                
+                open_controls_menu(id);
             }
         }
     }
@@ -332,29 +411,30 @@ default
 
     link_message(integer sender, integer num, string str, key id)
     {
-        if (llJsonGetValue(str, ["id"]) != info_request)
-        {
-            return;
-        }
+        string id = llJsonGetValue(str, ["id"]);
         
-        string title = llJsonGetValue(str, ["result", "title"]);
-
-        if (title == JSON_INVALID)
+        if (id == info_request)
         {
-            return;
-        }
-
-        if (title == "")
-        {
-            llSetText("", ZERO_VECTOR, 0);
-        }
-        else
-        {
-            float time = (float) llJsonGetValue(str, ["result", "time"]);
-            float duration = (float) llJsonGetValue(str, ["result", "duration"]);
-            integer paused = (integer) llJsonGetValue(str, ["result", "paused"]);
-            float volume = (float) llJsonGetValue(str, ["result", "volume"]);
-            set_playback_hover_text(title, time, duration, paused, volume);
+            string title = llJsonGetValue(str, ["result", "title"]);
+    
+            if (title == JSON_INVALID)
+            {
+                return;
+            }
+    
+            if (title == "")
+            {
+                llSetText("", ZERO_VECTOR, 0);
+            }
+            else
+            {
+                float time = (float) llJsonGetValue(str, ["result", "time"]);
+                float duration = (float) llJsonGetValue(str, ["result", "duration"]);
+                integer paused = (integer) llJsonGetValue(str, ["result", "paused"]);
+                float volume = (float) llJsonGetValue(str, ["result", "volume"]);
+                
+                set_playback_hover_text(title, time, duration, paused, volume);
+            }
         }
     }
 }
