@@ -30,11 +30,7 @@ The intro clip of a song is a clip which plays once when the song is started, bu
 
 The rest of the lines in the notecard will be the UUIDs of each clip. They must be in the correct order, and if the song has an intro clip, it must be the first clip listed.
 
-The name of the notecard is the name you use to start the song, for example when using the `PMP_PLAY` command:
-
-```lsl
-pmp_play(LINK_ROOT, "Song name", FALSE, 1);
-```
+The name of the notecard is the name you use to start the song, for example when using the `pmp:play` command.
 
 # Interacting with pmp
 
