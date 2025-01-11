@@ -84,9 +84,17 @@ Resume the currently paused song.
 jsonrpc_link_notification(LINK_ROOT, "pmp:resume", JSON_OBJECT, []);
 ```
 
-### `pmp:get-volume ()`
+### `pmp:info ()`
 
-Get the current volume setting.
+Get the current playback info.
+
+#### Results
+
+- `title` The title of the currently playing song, or `""` if no song is playing.
+- `time` The current time of the song in seconds.
+- `duration` The total duration of the song in seconds.
+- `paused` Whether or not the song is paused.
+- `volume` The current volume the song is being played at.
 
 #### Example
 
@@ -97,7 +105,7 @@ default
 {
     state_entry()
     {
-        request_id = jsonrpc_link_request(LINK_ROOT, "pmp:get-volume", JSON_OBJECT, []);
+        request_id = jsonrpc_link_request(LINK_ROOT, "pmp:info", JSON_OBJECT, []);
     }
 
     link_message(integer sender, integer num, string str, key id)
@@ -106,7 +114,7 @@ default
 
         if (jsonrpc_id == request_id)
         {
-            llOwnerSay("Current volume: " + llJsonGetValue(str, ["result"]);
+            llOwnerSay("Current song: " + llJsonGetValue(str, ["result", "title"]);
         }
     }
 }
@@ -126,34 +134,6 @@ Set the volume of the currently playing song.
 jsonrpc_link_notification(LINK_ROOT, "pmp:set-volume", JSON_OBJECT, ["volume", .5]);
 ```
 
-### `pmp:get-time ()`
-
-Get the current playback time in seconds.
-
-#### Example
-
-```lsl
-string request_id;
-
-default
-{
-    state_entry()
-    {
-        request_id = jsonrpc_link_request(LINK_ROOT, "pmp:get-time", JSON_OBJECT, []);
-    }
-    
-    link_message(integer sender, integer num, string str, key id)
-    {
-        jsonrpc_id = llJsonGetValue(str, ["id"]);
-        
-        if (jsonrpc_id == request_id)
-        {
-            llOwnerSay("Current time: " + llJsonGetValue(str, ["result"]) + " seconds");
-        }
-    }
-}
-```
-
 ### `pmp:set-time (time)`
 
 Set the current playback time of the current song.
@@ -168,163 +148,17 @@ Set the current playback time of the current song.
 jsonrpc_link_notification(LINK_ROOT, "pmp:set-time", JSON_OBJECT, ["time", 30.0]);
 ```
 
-### `pmp:is-ready ()`
+### `pmp:startup-complete`
 
-Check if the pmp script is fully initialized.
+Sent when the script finishes intializing.
 
-#### Example
+### `pmp:song-started`
 
-```lsl
-string request_id;
+Sent when a song starts playing.
 
-default
-{
-    state_entry()
-    {
-        request_id = jsonrpc_link_request(LINK_ROOT, "pmp:is-ready", JSON_OBJECT, []);
-    }
-    
-    link_message(integer sender, integer num, string str, key id)
-    {
-        string jsonrpc_id = llJsonGetValue(str, ["id"]);
-        
-        if (jsonrpc_id == request_id)
-        {
-            integer is_ready = (integer) llJsonGetValue(str, ["result"]);
-            
-            if (is_ready)
-            {
-                llOwnerSay("The pmp script is ready");
-            }
-            else
-            {
-                llOwnerSay("THe pmp script is not yet ready");
-            }
-        }
-    }
-}
-```
+### `pmp:song-ended`
 
-### `pmp:current-song ()`
-
-Get the title of the currently playing song.
-
-#### Example
-
-```lsl
-string request_id;
-
-default
-{
-    state_entry()
-    {
-        request_id = jsonrpc_link_request(LINK_ROOT, "pmp:current-song", JSON_OBJECT, []);
-    }
-    
-    link_message(integer sender, integer num, string str, key id)
-    {
-        string jsonrpc_id = llJsonGetValue(str, ["id"]);
-        
-        if (jsonrpc_id == request_id)
-        {
-            llOwnerSay("Current song: " + llJsonGetValue(str, ["result"]));
-        }
-    }
-}
-```
-
-### `pmp:get-duration ()`
-
-Get the duration in seconds of the currently playing song.
-
-#### Example
-
-```lsl
-string request_id;
-
-default
-{
-    state_entry()
-    {
-        request_id = jsonrpc_link_request(LINK_ROOT, "pmp:get-duration", JSON_OBJECT, []);
-    }
-    
-    link_message(integer sender, integer num, string str, key id)
-    {
-        string jsonrpc_id = llJsonGetValue(str, ["id"]);
-        
-        if (jsonrpc_id == request_id)
-        {
-            llOwnerSay("Duration: " + llJsonGetValue(str, ["result"]);
-        }
-    }
-}
-```
-
-### `pmp:get-progress ()`
-
-Get the progress through the current song as a percentage.
-
-#### Example
-
-```lsl
-string request_id;
-
-default
-{
-    state_entry()
-    {
-        request_id = jsonrpc_link_request(LINK_ROOT, "pmp:get-progress", JSON_OBJECT, []);
-    }
-    
-    link_message(integer sender, integer num, string str, key id)
-    {
-        string jsonrpc_id = llJsonGetValue(str, ["id"]);
-        
-        if (jsonrpc_id == request_id)
-        {
-            llOwnerSay("Song progress: " + llJsonGetValue(str, ["result"]));
-        }
-    }
-}
-```
-
-### `pmp:is-paused ()`
-
-Check if playback is currently paused or not.
-
-#### Example
-
-```lsl
-string request_id;
-
-default
-{
-    state_entry()
-    {
-        request_id = jsonrpc_link_request(LINK_ROOT, "pmp:is-paused", JSON_OBJECT, []);
-    }
-    
-    link_message(integer sender, integer num, string str, key id)
-    {
-        string jsonrpc_id = llJsonGetValue(str, ["id"]);
-        
-        if (jsonrpc_id == request_id)
-        {
-            integer is_paused = (integer) llJsonGetValue(str, ["result"]);
-            
-            if (is_paused)
-            {
-                llOwnerSay("The song is paused.");
-            }
-            else
-            {
-                llOwnerSay("The song is playing.");
-            }
-        }
-    }
-}
-```
+Sent when a song ends.
 
 ## Helper functions
 [script template.lsl](script%20template.lsl) contains helper functions for calling these methods.
