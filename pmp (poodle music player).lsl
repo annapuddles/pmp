@@ -1,5 +1,5 @@
 /* The version number of pmp. */
-string version = "2.0.3";
+string version = "2.1.0";
 
 /* CONFIGURATION */
 
@@ -194,6 +194,69 @@ process_config(string data)
     }
 }
 
+/* Calculate current time of song. */
+float get_time()
+{
+    float t;
+        
+    if (clip == -1)
+    {
+        t = duration - time_remaining;
+    }
+    else
+    {
+        t = (clip - first_clip) * clip_len - time_remaining;
+    }
+    
+    if (t < 0)
+    {
+        t = 0;
+    }
+    
+    return t;
+}
+
+/* Set the volume of the current song. */
+set_volume(float vol)
+{
+    if (vol < 0)
+    {
+        vol = 0;
+    }
+    else if (vol > 1)
+    {
+        vol = 1;
+    }
+    
+    volume = vol;
+    default_volume = vol;
+    
+    llAdjustSoundVolume(volume);
+}
+
+/* Set the playback time of the current song. */
+set_time(float time)
+{
+    llSetTimerEvent(0);
+    llStopSound();
+    
+    if (time < 0.0)
+    {
+        time = 0.0;
+    }
+    else if (time > duration)
+    {
+        time = duration;
+    }
+    
+    clip = first_clip + (integer) (time / clip_len);
+        
+    preload(clip);
+        
+    time_remaining = 1.0;
+    llSetTimerEvent(update_interval);
+}
+
 /* Process a message from a linked prim or listener. */
 process_message(integer sender, string message)
 {
@@ -245,86 +308,50 @@ process_message(integer sender, string message)
         play_song(title, loop, volume);
     }
     else if (method == "pmp:set-volume")
+    {        
+        set_volume((float) llJsonGetValue(message, ["params", "volume"]));
+    }
+    else if (method == "pmp:adjust-volume")
     {
-        float vol = (float) llJsonGetValue(message, ["params", "volume"]);
-        
-        if (vol >= 0.0 && vol <= 1.0)
-        {
-            volume = vol;
-            default_volume = vol;
-        }
+        float by = (float) llJsonGetValue(message, ["params", "by"]);
+        set_volume(volume + by);
     }
     else if (method == "pmp:set-time")
     {
-        float time = (float) llJsonGetValue(message, ["params", "time"]);
-
-        if (time < 0.0)
-        {
-            time = 0.0;
-        }
-        else if (time > duration)
-        {
-            time = duration;
-        }
-        
-        clip = first_clip + (integer) (time / clip_len);
-        
-        preload(clip);
-        
-        time_remaining = 1.0;
-        llSetTimerEvent(update_interval);
+        set_time((float) llJsonGetValue(message, ["params", "time"]));
+    }
+    else if (method == "pmp:adjust-time")
+    {
+        float by = (float) llJsonGetValue(message, ["params", "by"]);
+        set_time(get_time() + by);
     }
     else if (method == "pmp:pause")
     {
         if (paused)
         {
-            return;
-        }
-    
-        paused = TRUE;
-        llStopSound();
-        llSetTimerEvent(0);
-        
-        /* Go back to the previous clip */
-        if (clip > first_clip)
-        {
-            --clip;
-        }
-    }
-    else if (method == "pmp:resume")
-    {
-        if (!paused)
-        {
-            return;
-        }
-    
-        paused = FALSE;
-        preload(clip);
-        time_remaining = 1.0;
-        llSetTimerEvent(update_interval);
-    }
-    else if (method == "pmp:info")
-    {
-        /* Calculate current time of song. */
-        float t;
-        
-        if (clip == -1)
-        {
-            t = duration - time_remaining;
+            paused = FALSE;
+            preload(clip);
+            time_remaining = 1.0;
+            llSetTimerEvent(update_interval);
         }
         else
         {
-            t = (clip - first_clip) * clip_len - time_remaining;
+            paused = TRUE;
+            llStopSound();
+            llSetTimerEvent(0);
+            
+            /* Go back to the previous clip */
+            if (clip > first_clip)
+            {
+                --clip;
+            }
         }
-        
-        if (t < 0)
-        {
-            t = 0;
-        }
-        
+    }
+    else if (method == "pmp:info")
+    {
         jsonrpc_link_response(sender, message, llList2Json(JSON_OBJECT, [
             "title", title,
-            "time", t,
+            "time", get_time(),
             "duration", duration,
             "paused", paused,
             "volume", volume
