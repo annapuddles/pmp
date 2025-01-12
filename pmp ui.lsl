@@ -1,4 +1,4 @@
-/* pmp ui v1.1.0 - Example user interface for pmp. */
+/* pmp ui v1.1.1 - Example user interface for pmp. */
 
 /* CONFIGURATION */
 
@@ -238,6 +238,13 @@ open_song_menu(key id)
 {
     list songs = song_list();
     integer num_songs = llGetListLength(songs);
+    
+    if (num_songs == 0)
+    {
+        llOwnerSay("No songs found. Please add some song notecards first!");
+        open_controls_menu(id);
+        return;
+    }
     
     integer total_pages = llCeil(num_songs / 9.0);
     
