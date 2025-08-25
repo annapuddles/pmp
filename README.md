@@ -7,7 +7,7 @@ The preloader is optional, but can improve the smoothness of playback.
 
 # Creating song notecards
 
-First, you must divide your song into clips of 10 seconds or less in order to upload them. All of the clips must be the same length except the last.
+First, you must divide your song into clips of 30 seconds or less in order to upload them. All of the clips must be the same length except the last.
 
 Next, create a notecard for the song. A song notecard has the following format:
 
@@ -272,3 +272,4 @@ Set the current time in seconds to play the current song from.
 ```lsl
 pmp_set_time(LINK_ROOT, 30);
 ```
+
